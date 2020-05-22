@@ -1,0 +1,107 @@
+pragma solidity >=0.4.22 <0.6.0;
+
+contract SimpleAuction {
+    // Parameters of the auction. Times are either
+    // absolute unix timestamps (seconds since 1970-01-01)
+    // or time periods in seconds.
+    address payable public university;
+    uint public expiration;
+
+    // Current state of the auction.
+    address public highestBidder;
+    uint public highestBid;
+
+    // Allowed withdrawals of previous bids
+    mapping(address => uint) pendingReturns;
+
+    // Set to true at the end, disallows any change.
+    // By default initialized to `false`.
+    bool ended;
+
+    // Events that will be emitted on changes.
+    event HighestBidIncreased(address bidder, uint amount);
+    event AuctionEnded(address winner, uint amount);
+
+    // Include natspec comment, shown when user is asked for confirmation
+    /// Create a simple auction with `_biddingTime`
+    /// seconds bidding time on behalf of the
+    /// university address `_university`.
+    constructor(
+        uint _biddingTime,
+        address payable _university
+    ) public {
+        university = _university;
+        expiration = now + _biddingTime;
+    }
+
+    /// Bid on the auction with the value sent
+    /// together with this transaction.
+    /// The value will only be refunded if the
+    /// auction is not won.
+    function bid() public payable {
+        // No arguments are necessary, all
+        // information is already part of
+        // the transaction. The keyword payable
+        // is required for the function to
+        // be able to receive Ether.
+
+        // Revert the call if the bidding
+        // period is over.
+        require(
+            now <= expiration,
+            "Auction already ended."
+        );
+
+        // If the bid is not higher, send the bid back.
+        require(
+            msg.value > highestBid,
+            "Higher bid already exists."
+        );
+
+        if (highestBid != 0) {
+            // we don't use highestBidder.send(highestBid)
+            // to send the money back due to security risk.
+            // It could possibly execute an untrusted contract.
+            // It is safer to let the students
+            // withdraw their bid themselves.
+            pendingReturns[highestBidder] += highestBid;
+        }
+        highestBidder = msg.sender;
+        highestBid = msg.value;
+        emit HighestBidIncreased(msg.sender, msg.value);
+    }
+
+    /// Overbid will be Withdrawn.
+    function withdraw() public returns (bool) {
+        uint amount = pendingReturns[msg.sender];
+        if (amount > 0) {
+            // It is important to set this to zero because the student
+            // can call this function multiple times as part of the receiving call
+            // before `send` returns.
+            pendingReturns[msg.sender] = 0; //this will prevent double transaction
+
+            if (!msg.sender.send(amount)) {
+                // No need to call throw here, just reset the amount owing
+                pendingReturns[msg.sender] = amount;
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// End the auction and send the highest bid
+    /// to the university.
+    function auctionEnd() public {
+
+        // 1. Check the conditions
+        require(now >= expiration, "Course bidding has not yet ended.");
+        require(!ended, "auctionEnd has already been called.");
+
+        // 2. Effects
+        ended = true;
+        emit AuctionEnded(highestBidder, highestBid);
+
+        // 3. Interaction
+        university.transfer(highestBid);
+    }
+}
