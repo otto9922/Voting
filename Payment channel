@@ -11,37 +11,15 @@ contract PaymentChannel {
         public
         payable
     {
-        student = msg.student;
+        student = msg.sender;
         university = _university;
         expiration = now + duration;
     }
     
-/// When the student successfully bid for a course and pay the corresponding amount
-    function ConstructPayment(contractAddress, amount) {
-    return abi.soliditySHA3(
-        ["address", "uint256"],
-        [contractAddress, amount]
-        );
-    }
-
-    function SignPayment(message, callback) {
-    web3.eth.personal.sign(
-        "0x" + message.toString("hex"),
-        web3.eth.defaultAccount,
-        callback
-        );
-    }
-    
-/// Sign the payment before sending 
-    function signPayment(contractAddress, amount, callback) {
-    var message = constructPaymentMessage(contractAddress, amount);
-    signMessage(message, callback);
-    }   
-    
 /// Closing the channel after all the payments from bidding were received
 /// Univeristy will recieve the payment amounts,and the remainder will send to the students
     function close(uint256 amount, bytes memory signature) public {
-        require(msg.student == univeristy); //Validation of message before closing the payment channel
+        require(msg.sender == university); //Validation of message before closing the payment channel
         require(isValidSignature(amount, signature)); //Validation of signature before closing the payment channel
         university.transfer(amount);
         selfdestruct(student);
